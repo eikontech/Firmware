@@ -72,11 +72,6 @@ PrecLand::PrecLand(Navigator *navigator) :
 void
 PrecLand::on_activation()
 {
-	// We need to subscribe here and not in the constructor because constructor is called before the navigator task is spawned
-	if (_target_pose_sub < 0) {
-		_target_pose_sub = orb_subscribe(ORB_ID(landing_target_pose));
-	}
-
 	_state = PrecLandState::Start;
 	_search_cnt = 0;
 	_last_slewrate_time = 0;
@@ -90,6 +85,7 @@ PrecLand::on_activation()
 	position_setpoint_triplet_s *pos_sp_triplet = _navigator->get_position_setpoint_triplet();
 
 	pos_sp_triplet->next.valid = false;
+	pos_sp_triplet->previous.valid = false;
 
 	// Check that the current position setpoint is valid, otherwise land at current position
 	if (!pos_sp_triplet->current.valid) {
@@ -98,6 +94,7 @@ PrecLand::on_activation()
 		pos_sp_triplet->current.lon = _navigator->get_global_position()->lon;
 		pos_sp_triplet->current.alt = _navigator->get_global_position()->alt;
 		pos_sp_triplet->current.valid = true;
+		pos_sp_triplet->current.timestamp = hrt_absolute_time();
 	}
 
 	_sp_pev = matrix::Vector2f(0, 0);
@@ -105,16 +102,17 @@ PrecLand::on_activation()
 	_last_slewrate_time = 0;
 
 	switch_to_state_start();
+
+	_is_activated = true;
 }
 
 void
 PrecLand::on_active()
 {
 	// get new target measurement
-	orb_check(_target_pose_sub, &_target_pose_updated);
+	_target_pose_updated = _target_pose_sub.update(&_target_pose);
 
 	if (_target_pose_updated) {
-		orb_copy(ORB_ID(landing_target_pose), _target_pose_sub, &_target_pose);
 		_target_pose_valid = true;
 	}
 
@@ -161,6 +159,12 @@ PrecLand::on_active()
 		break;
 	}
 
+}
+
+void
+PrecLand::on_inactivation()
+{
+	_is_activated = false;
 }
 
 void

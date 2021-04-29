@@ -42,10 +42,11 @@
 
 #include <float.h>
 
-#include <px4_module_params.h>
+#include <lib/mathlib/mathlib.h>
+#include <px4_platform_common/module_params.h>
 #include <drivers/drv_hrt.h>
 #include <lib/ecl/geo/geo.h>
-#include <px4_defines.h>
+#include <px4_platform_common/defines.h>
 #include <uORB/Subscription.hpp>
 #include <uORB/topics/home_position.h>
 #include <uORB/topics/vehicle_global_position.h>
@@ -62,7 +63,7 @@ public:
 	Geofence(Navigator *navigator);
 	Geofence(const Geofence &) = delete;
 	Geofence &operator=(const Geofence &) = delete;
-	~Geofence();
+	virtual ~Geofence();
 
 	/* Altitude mode, corresponding to the param GF_ALTMODE */
 	enum {
@@ -97,6 +98,13 @@ public:
 	 */
 	bool check(const struct mission_item_s &mission_item);
 
+
+	bool isCloserThanMaxDistToHome(double lat, double lon, float altitude);
+
+	bool isBelowMaxAltitude(float altitude);
+
+	virtual bool isInsidePolygonOrCircle(double lat, double lon, float altitude);
+
 	int clearDm();
 
 	bool valid();
@@ -127,8 +135,18 @@ public:
 	int getAltitudeMode() { return _param_gf_altmode.get(); }
 	int getSource() { return _param_gf_source.get(); }
 	int getGeofenceAction() { return _param_gf_action.get(); }
+	float getMaxHorDistanceHome() { return _param_gf_max_hor_dist.get(); }
+	float getMaxVerDistanceHome() { return _param_gf_max_ver_dist.get(); }
 
 	bool isHomeRequired();
+
+	/**
+	 * Check if a point passes the Geofence test.
+	 * In addition to checkPolygons(), this takes all additional parameters into account.
+	 *
+	 * @return false for a geofence violation
+	 */
+	bool checkAll(double lat, double lon, float altitude);
 
 	/**
 	 * print Geofence status to the console
@@ -166,7 +184,7 @@ private:
 		(ParamFloat<px4::params::GF_MAX_VER_DIST>) _param_gf_max_ver_dist
 	)
 
-	uORB::Subscription<vehicle_air_data_s>	_sub_airdata;
+	uORB::SubscriptionData<vehicle_air_data_s>	_sub_airdata;
 
 	int _outside_counter{0};
 	uint16_t _update_counter{0}; ///< dataman update counter: if it does not match, we polygon data was updated
@@ -188,13 +206,7 @@ private:
 	 */
 	bool checkPolygons(double lat, double lon, float altitude);
 
-	/**
-	 * Check if a point passes the Geofence test.
-	 * In addition to checkPolygons(), this takes all additional parameters into account.
-	 *
-	 * @return false for a geofence violation
-	 */
-	bool checkAll(double lat, double lon, float altitude);
+
 
 	bool checkAll(const vehicle_global_position_s &global_position);
 	bool checkAll(const vehicle_global_position_s &global_position, float baro_altitude_amsl);
